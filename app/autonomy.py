@@ -19,6 +19,47 @@ def evaluate_gate(
     writes_so_far: int,
     max_auto_writes: int = SETTINGS.max_auto_writes,
 ) -> GateDecision:
+    
+    if tool_kind == "read":
+        return GateDecision(
+                allow=True,
+                simulate=False,
+                requires_approval=False,
+                reason="Reads always allowed"
+        )
+
+    if level == "shadow":
+        return GateDecision(
+                allow=True,
+                simulate=True,
+                requires_approval=False,
+                reason="In Shadow autonomy level, agent should run as in production but, results are to be simulated and recorded"
+        )
+
+    elif level == "supervised":
+        return GateDecision(
+                allow=False,
+                simulate=False,
+                requires_approval=True,
+                reason="In Supervised autonomy level, agent is allowed to run as in production but, needs human approval at every step"
+        )
+    
+    elif level == "autonomous":
+        if writes_so_far < max_auto_writes:
+            return GateDecision(
+                    allow=True,
+                    simulate=False,
+                    requires_approval=False,
+                    reason="In Autonomous autonomy level,while the writes so far are less than max auto writes allowed, agent is allowed to run as in production"
+            )
+        else:
+            return GateDecision(
+                    allow=False,
+                    simulate=False,
+                    requires_approval=True,
+                    reason="In Autonomous autonomy level,while the writes so far are greater than or equal to max auto writes allowed, agent is allowed to run as in production but, requires human approval at every step"
+            )
+
     """TASK 1 — TODO(candidate): decide how one tool call is allowed to proceed.
 
     Start here. It's the smallest task, it needs nothing else to be finished first, and it's the
