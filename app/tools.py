@@ -70,6 +70,34 @@ class Workspace:
     def send_message(
         self, contact_id: str = "", body: str = "", idempotency_key: str = "", **_: Any
     ) -> dict[str, Any]:
+        
+        if not contact_id or not idempotency_key:
+            raise ToolError("missing contact_id or idempotency_key")
+        
+        if contact_id not in self.contacts:
+            raise ToolError(f"contact {contact_id} not found")
+        
+        if idempotency_key in self._idem:
+            saved_result = dict(self._idem[idempotency_key])
+
+            saved_result["deduped"] = True
+
+            return saved_result
+        
+        self.messages.append({
+            "contact_id":contact_id,
+            "body":body
+        })
+
+        result = {
+            "message_id":f"m_{len(self.messages)}",
+            "contact_id":contact_id,
+            "deduped":False
+        }
+
+        self._idem[idempotency_key] = result
+        return result
+
         """TASK 4b — TODO(candidate): make sending a message safe to call twice.
 
         Here's the problem this solves. Sending a message is not like updating a field: if an

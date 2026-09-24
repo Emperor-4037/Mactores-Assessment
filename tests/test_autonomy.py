@@ -2,6 +2,7 @@ import pytest
 from app.autonomy import evaluate_gate
 from app.models import GateDecision
 
+#Unit tests for the evaluate_gate function using parameterized inputs to cover various scenarios and autonomy levels.
 @pytest.mark.parametrize(
     "level, tool_kind, writes_so_far, max_auto_writes, expected",
     [(

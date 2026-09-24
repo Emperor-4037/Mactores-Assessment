@@ -11,7 +11,7 @@ def test_retry_on_throttle():
 
     result = complete_with_retry(model, [], SETTINGS)
 
-    assert result == '{"final":"hi"}'
+    assert result == '{"intent":"final","answer":"hi"}'
     assert model.calls == 3
 
 def test_return_on_fatal():
