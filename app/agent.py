@@ -148,7 +148,92 @@ def run_agent(run: Run, deps: AgentDeps) -> Run:
       - "never_finishes" ends with status "failed" and does not hang
       - "bad_credentials" ends with status "failed" and does not raise out of run_agent
     """
-    raise NotImplementedError("run_agent — see TASK 3")
+    
+    # --- SETUP ---
+    task = deps.store.get_task(run.task_id)
+    if task is None:
+        raise ValueError(f"Task {run.task_id} not found")
+        
+    messages = initial_messages(task.goal)
+    writes_done = 0
+    run.status = "running"
+    
+    try:
+        # --- THE LOOP ---
+        for _ in range(deps.settings.max_steps):
+            
+            # 1. DECIDE
+            intent = _decide(deps, messages)
+            if intent is None:
+                _emit(run, "error", message="Model produced invalid JSON")
+                run.status = "failed"
+                run.error = "Model produced invalid JSON"
+                break
+                
+            # 2. FINISHED?
+            if intent.intent == "final":
+                _emit(run, "final", result=intent.answer)
+                run.status = "completed"
+                break
+
+            # 3. FIND THE TOOL
+            # intent.tool could be None, so we default to an empty string to appease the type checker
+            tool_name = intent.tool or ""
+            tool = deps.registry.get(tool_name)
+            if tool is None:
+                _emit(run, "tool_result", tool=tool_name, ok=False, message="Unknown tool")
+                error_msg = f"Unknown tool: {tool_name}"
+                messages.append({"role": "user", "content": _observation({"error": error_msg})})
+                continue
+
+            # 4. GATE IT
+            decision = evaluate_gate(
+                level=run.autonomy, 
+                tool_kind=tool.kind, 
+                writes_so_far=writes_done,
+                max_auto_writes=deps.settings.max_auto_writes
+            )
+            _emit(run, "gate", message=decision.reason)
+            
+            if decision.requires_approval:
+                approved = _ask_reviewer(task, run, deps)
+                if not approved:
+                    _emit(run, "tool_result", tool=tool.name, ok=False, message="Reviewer rejected")
+                    messages.append({"role": "user", "content": _observation({"error": "Reviewer rejected the action."})})
+                    continue
+
+            # 5. RUN IT
+            result, ok = _execute(tool, intent.args, run, decision.simulate)
+            _emit(run, "tool_call", tool=tool.name, args=intent.args)
+            _emit(run, "tool_result", tool=tool.name, result=result, ok=ok)
+            
+            if ok and tool.kind == "write":
+                run.effects.append(Effect(
+                    tool=tool.name, 
+                    args=intent.args, 
+                    simulated=decision.simulate
+                ))
+                writes_done += 1
+
+            # 6. TELL THE MODEL
+            messages.append({"role": "user", "content": _observation(result)})
+            
+        # --- AFTER THE LOOP ---
+        if run.status == "running":
+            _emit(run, "error", message="Max steps reached without finishing")
+            run.status = "failed"
+            run.error = "Max steps reached without finishing"
+            
+    except Exception as e:
+        run.status = "failed"
+        run.error = str(e)
+        _emit(run, "error", message=f"Fatal error: {e}", ok=False)
+        
+    # --- GRADING ---
+    if run.status == "completed":
+        run.verdict = verify(task, run)
+        
+    return run
 
 
 # ─── Provided helpers ─────────────────────────────────────────────────────────────────────────
