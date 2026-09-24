@@ -77,25 +77,6 @@ class MockModelClient:
 def complete_with_retry(
     model: ModelClient, messages: list[dict], settings: Settings = SETTINGS
 ) -> str:
-
-    max_attempts = SETTINGS.model_max_retries + 1
-
-    for attempts in range(max_attempts):
-        
-        try:
-            model.complete(messages)
-
-        except ThrottleError as e:
-
-            if attempts == max_attempts - 1:
-                raise e
-
-            back_off_time = Settings.model_backoff_base_seconds
-            time.sleep(back_off_time * (2 ** attempts))
-
-        except Exception as e:
-            raise e
-
     """TASK 4a — TODO(candidate): call the model, and survive a transient failure.
 
     Networks and model providers are unreliable. Some failures are worth retrying and some are
@@ -124,4 +105,24 @@ def complete_with_retry(
 
     Write those two tests before you write the function.
     """
-    raise NotImplementedError("complete_with_retry — see TASK 4a")
+    # We want up to settings.model_max_retries RETRIES, 
+    # which means we need (settings.model_max_retries + 1) total attempts.
+    max_attempts = settings.model_max_retries + 1
+
+    for attempt in range(max_attempts):
+        try:
+            # We MUST return the result if it succeeds
+            return model.complete(messages)
+
+        except ThrottleError as e:
+            # If we are on our very last attempt, we give up and re-raise the error
+            if attempt == max_attempts - 1:
+                raise e
+
+            # Otherwise, we sleep using exponential backoff
+            back_off_time = settings.model_backoff_base_seconds
+            time.sleep(back_off_time * (2 ** attempt))
+
+        except Exception as e:
+            # Any other exception (like FatalError) should be raised immediately
+            raise e
