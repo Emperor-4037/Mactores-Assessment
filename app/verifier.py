@@ -15,9 +15,53 @@ from __future__ import annotations
 
 from app.models import Run, Task, Verdict
 
-
 def verify(task: Task, run: Run) -> Verdict:
-    """TASK 2 — TODO(candidate): diff what was expected against what happened.
+    matched = []
+    missing = []
+    
+    # Create a copy so we can cross items off as they are matched
+    unspent_actual = list(run.effects)
+
+    # Loop through everything we EXPECTED to happen
+    for expected in task.expected_effects:
+        found_match = False
+        
+        # Look for it in the ACTUAL things that happened
+        for actual in unspent_actual:
+            if expected.tool == actual.tool:
+                # Check subset: all keys/values in expected.match must exist in actual.args
+                is_subset = all(
+                    k in actual.args and actual.args[k] == v 
+                    for k, v in expected.match.items()
+                )
+                
+                if is_subset:
+                    matched.append(expected)
+                    unspent_actual.remove(actual) # Cross it off so we don't use it again!
+                    found_match = True
+                    break 
+        
+        if not found_match:
+            missing.append(expected)
+            
+    # Anything left over in unspent_actual was never claimed (nobody expected it)
+    unexpected = unspent_actual
+    
+    # We pass if nothing is missing and nothing was unexpected
+    passed = len(missing) == 0 and len(unexpected) == 0
+    
+    return Verdict(
+        passed=passed,
+        matched=matched,
+        missing=missing,
+        unexpected=unexpected,
+        mode=run.autonomy,
+        detail=f"{len(matched)} matched, {len(missing)} missing, {len(unexpected)} unexpected"
+    )
+    
+raise NotImplementedError("verify — see TASK 2")
+
+"""TASK 2 — TODO(candidate): diff what was expected against what happened.
 
     Another pure function — two objects in, a Verdict out, no I/O. Do this second.
 
@@ -57,7 +101,5 @@ def verify(task: Task, run: Run) -> Verdict:
       - the agent did something nobody asked for         → passed=False, it's in `unexpected`
       - a shadow run with simulated effects              → same verdict as the real run would give
       - two identical expectations, only one real effect  → 1 matched, 1 missing (rule 2)
-
-    Write at least the first three before you write the function.
-    """
-    raise NotImplementedError("verify — see TASK 2")
+Write at least the first three before you write the function.
+"""
